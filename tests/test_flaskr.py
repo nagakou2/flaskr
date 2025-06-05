@@ -144,6 +144,56 @@ class TestFlaskr:
             # the database state is not guaranteed. In a real-world scenario,
             # you might want to set up a known database state before running this test.
 
+    def test_remove_entry_not_logged_in(self):
+        """
+        Test that a user cannot remove an entry when not logged in.
+        """
+        with app.test_client() as client:
+            # Try to remove an entry without being logged in
+            response = client.post('/remove/1', follow_redirects=True)
+            
+            # Should get a 401 Unauthorized error
+            assert response.status_code == 401
+
+    def test_remove_entry_logged_in(self):
+        """
+        Test that a logged-in user can successfully remove an entry.
+        """
+        with app.test_client() as client:
+            # First, log in
+            client.post('/login', data={
+                'username': app.config['USERNAME'],
+                'password': app.config['PASSWORD']
+            })
+            
+            # Add an entry to ensure there's something to delete
+            client.post('/add', data={
+                'title': 'Test Entry to Remove',
+                'text': 'This entry will be removed'
+            })
+            
+            # Get the entries to find the ID of the one we just added
+            with app.app_context():
+                db = get_db()
+                entry = db.execute('SELECT id FROM entries WHERE title = ?', 
+                                  ['Test Entry to Remove']).fetchone()
+                
+                if entry:
+                    entry_id = entry['id']
+                    
+                    # Now try to remove the entry
+                    response = client.post(f'/remove/{entry_id}', follow_redirects=True)
+                    
+                    # Check if the removal was successful
+                    assert response.status_code == 200
+                    assert b'Entry was successfully removed' in response.data
+                    
+                    # Verify the entry is no longer in the database
+                    check = db.execute('SELECT * FROM entries WHERE id = ?', [entry_id]).fetchone()
+                    assert check is None
+                else:
+                    # If no entry was found, the test should fail
+                    assert False, "Test entry was not created successfully"
 
 
 class AuthActions(object):
